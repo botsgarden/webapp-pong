@@ -19,7 +19,7 @@ public class WebApp extends AbstractVerticle {
     
     router.route().handler(BodyHandler.create());
 
-    router.post("/api/ping").handler(context -> {
+    router.post("/api/pong").handler(context -> {
       String name = Optional.ofNullable(context.getBodyAsJson().getString("name")).orElse("John Doe");
       System.out.println("🤖 called by " + name);
 
@@ -30,11 +30,11 @@ public class WebApp extends AbstractVerticle {
         );
     });
 
-    router.get("/api/ping").handler(context -> {
+    router.get("/api/pong").handler(context -> {
       context.response()
         .putHeader("content-type", "application/json;charset=UTF-8")
         .end(
-          new JsonObject().put("message", "🏓 pong!").toString()
+          new JsonObject().put("message", "🏓 ping! 👋").toString()
         );
     });
 
