@@ -49,6 +49,7 @@ public class WebApp extends AbstractVerticle {
         Optional.ofNullable(System.getenv("REDIS_URL")).orElse("redis://127.0.0.1:6379")
       );
       redisson = Redisson.create(config);
+      return redisson;
     });
 
 
