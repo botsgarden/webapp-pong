@@ -42,9 +42,12 @@ public class WebApp extends AbstractVerticle {
 
     // === Redisson Part === 
     Config config = new Config();
+
+
+
     config.useSingleServer().setAddress(
       Optional.ofNullable(System.getenv("REDIS_URL")).orElse("redis://127.0.0.1:6379")
-    );
+    ).setPassword(Optional.ofNullable(System.getenv("REDIS_PASSWORD")).orElse(null));
     redisson = Redisson.create(config);
     bucket = redisson.getBucket("ball");
 
