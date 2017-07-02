@@ -13,20 +13,62 @@ import java.util.Optional;
 //import java.util.function.*;
 //import java.util.List;
 
+import org.redisson.config.Config;
+import org.redisson.api.*;
+import org.redisson.Redisson;
+
+import io.vavr.control.*;
+
+
 public class WebApp extends AbstractVerticle {
-  
-  private Router defineRoutes(Router router) {
+
+  private RedissonClient redisson;
+  private RBucket<JsonObject> bucket;
+
+  public void stop(Future<Void> stopFuture) {
+    System.out.println("👋 bye bye ");
+    stopFuture.complete();
+
+  }
+
+
+  public void start() {
     
+    Router router = Router.router(vertx);
+
+    Integer httpPort = Integer.parseInt(Optional.ofNullable(System.getenv("PORT")).orElse("8080"));
+    HttpServer server = vertx.createHttpServer();
+
     router.route().handler(BodyHandler.create());
 
+    // === Redisson Part === ... with vavr
+
+    Try<RBucket<JsonObject>> tryBucket = Try.of(() -> {
+      Config config = new Config();
+      config.useSingleServer().setAddress(
+        Optional.ofNullable(System.getenv("REDIS_URL")).orElse("redis://127.0.0.1:6379")
+      );
+      redisson = Redisson.create(config);
+      RBucket<JsonObject> bucket = redisson.getBucket("ball");
+      return bucket;
+    });
+
+    tryBucket.onSuccess(bucket -> {
+      this.bucket = bucket;
+    }).onFailure(err -> {
+      this.bucket.set(new JsonObject().put("errorMessage", err.getMessage()));
+    });
+    
+    /* === Define routes and start the server === */
     router.post("/api/pong").handler(context -> {
-      String name = Optional.ofNullable(context.getBodyAsJson().getString("name")).orElse("John Doe");
-      System.out.println("🤖 called by " + name);
+
+      bucket.set(context.getBodyAsJson());
+      System.out.println("🤖 bucket updated");
 
       context.response()
         .putHeader("content-type", "application/json;charset=UTF-8")
         .end(
-          new JsonObject().put("message", "👋 hey "+ name + " 😃").toString()
+          new JsonObject().put("message", "👋 hey bucket updated 😃").toString()
         );
     });
 
@@ -34,23 +76,12 @@ public class WebApp extends AbstractVerticle {
       context.response()
         .putHeader("content-type", "application/json;charset=UTF-8")
         .end(
-          new JsonObject().put("message", "🏓 ping! 👋").toString()
+          bucket.get().encodePrettily()
         );
     });
 
     // serve static assets, see /resources/webroot directory
     router.route("/*").handler(StaticHandler.create());
-
-    return router;
-  }
-
-  public void start() {
-    
-    /* === Define routes and start the server === */
-    Router router = Router.router(vertx);
-    defineRoutes(router);
-    Integer httpPort = Integer.parseInt(Optional.ofNullable(System.getenv("PORT")).orElse("8080"));
-    HttpServer server = vertx.createHttpServer();
 
     server
       .requestHandler(router::accept)
