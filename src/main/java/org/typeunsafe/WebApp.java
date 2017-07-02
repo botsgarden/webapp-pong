@@ -17,8 +17,7 @@ import org.redisson.config.Config;
 import org.redisson.api.*;
 import org.redisson.Redisson;
 
-import io.vavr.control.*;
-
+//import io.vavr.control.*;
 
 public class WebApp extends AbstractVerticle {
 
@@ -41,59 +40,34 @@ public class WebApp extends AbstractVerticle {
 
     router.route().handler(BodyHandler.create());
 
-    // === Redisson Part === ... with vavr
+    // === Redisson Part === 
+    Config config = new Config();
+    config.useSingleServer().setAddress(
+      Optional.ofNullable(System.getenv("REDIS_URL")).orElse("redis://127.0.0.1:6379")
+    );
+    redisson = Redisson.create(config);
+    bucket = redisson.getBucket("ball");
 
-    Try<RedissonClient> getRedissonClient = Try.of(() -> {
-      Config config = new Config();
-      config.useSingleServer().setAddress(
-        Optional.ofNullable(System.getenv("REDIS_URL")).orElse("redis://127.0.0.1:6379")
-      );
-      redisson = Redisson.create(config);
-      return redisson;
+    bucket.set(new JsonObject().put("message","empty"));
+
+    router.post("/api/pong").handler(context -> {
+      bucket.set(context.getBodyAsJson());
+      System.out.println("🤖 bucket updated");
+
+      context.response()
+        .putHeader("content-type", "application/json;charset=UTF-8")
+        .end(
+          new JsonObject().put("message", "👋 hey bucket updated 😃").toString()
+        );
     });
 
-
-
-    getRedissonClient.onSuccess(redisson -> {
-      /* === Define routes and start the server === */
-      
-      // create a bucket if it does not exist
-      RBucket<JsonObject> bucket = redisson.getBucket("ball");
-      this.bucket = bucket;
-
-      router.post("/api/pong").handler(context -> {
-        bucket.set(context.getBodyAsJson());
-        System.out.println("🤖 bucket updated");
-
-        context.response()
-          .putHeader("content-type", "application/json;charset=UTF-8")
-          .end(
-            new JsonObject().put("message", "👋 hey bucket updated 😃").toString()
-          );
-      });
-
-      router.get("/api/pong").handler(context -> {
-        context.response()
-          .putHeader("content-type", "application/json;charset=UTF-8")
-          .end(
-            bucket.get().encodePrettily()
-          );
-      });
-
-
-    }).onFailure(err -> {
-
-      router.get("/api/pong").handler(context -> {
-        context.response()
-          .putHeader("content-type", "application/json;charset=UTF-8")
-          .end(
-            new JsonObject().put("errorMessage", err.getMessage()).encodePrettily()
-          );
-      });
+    router.get("/api/pong").handler(context -> {
+      context.response()
+        .putHeader("content-type", "application/json;charset=UTF-8")
+        .end(
+          bucket.get().encodePrettily()
+        );
     });
-    
-    
-
 
     /* === Start the server === */
 
