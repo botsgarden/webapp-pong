@@ -55,7 +55,8 @@ public class WebApp extends AbstractVerticle {
       
     });
 
-    getRedissonClient.onSuccess(redisson -> {
+    getRedissonClient
+    .onSuccess(redisson -> {
       this.redisson = redisson;
       bucket = redisson.getBucket("ball");
       bucket.set(new JsonObject().put("message","empty"));
@@ -78,9 +79,8 @@ public class WebApp extends AbstractVerticle {
             bucket.get().encodePrettily()
           );
       });
-    });
-
-    getRedissonClient.onFailure(fail -> {
+    })
+    .onFailure(fail -> {
       router.post("/api/pong").handler(context -> {
         context.response()
           .putHeader("content-type", "application/json;charset=UTF-8")
