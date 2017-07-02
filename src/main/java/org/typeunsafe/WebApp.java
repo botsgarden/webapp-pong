@@ -17,7 +17,7 @@ import org.redisson.config.Config;
 import org.redisson.api.*;
 import org.redisson.Redisson;
 
-//import io.vavr.control.*;
+import io.vavr.control.*;
 
 public class WebApp extends AbstractVerticle {
 
@@ -41,35 +41,61 @@ public class WebApp extends AbstractVerticle {
     router.route().handler(BodyHandler.create());
 
     // === Redisson Part === 
-    Config config = new Config();
 
-
-
-    config.useSingleServer().setAddress(
-      Optional.ofNullable(System.getenv("REDIS_URL")).orElse("redis://127.0.0.1:6379")
-    ).setPassword(Optional.ofNullable(System.getenv("REDIS_PASSWORD")).orElse(null));
-    redisson = Redisson.create(config);
-    bucket = redisson.getBucket("ball");
-
-    bucket.set(new JsonObject().put("message","empty"));
-
-    router.post("/api/pong").handler(context -> {
-      bucket.set(context.getBodyAsJson());
-      System.out.println("🤖 bucket updated");
-
-      context.response()
-        .putHeader("content-type", "application/json;charset=UTF-8")
-        .end(
-          new JsonObject().put("message", "👋 hey bucket updated 😃").toString()
-        );
+    Try<RedissonClient> getRedissonClient = Try.of(() -> {
+      Config config = new Config();
+      config.useSingleServer()
+      .setAddress(
+        Optional.ofNullable(System.getenv("REDIS_URL")).orElse("redis://127.0.0.1:6379")
+      )
+      .setPassword(
+        Optional.ofNullable(System.getenv("REDIS_PASSWORD")).orElse(null)
+      );
+      return Redisson.create(config);
+      
     });
 
-    router.get("/api/pong").handler(context -> {
-      context.response()
-        .putHeader("content-type", "application/json;charset=UTF-8")
-        .end(
-          bucket.get().encodePrettily()
-        );
+    getRedissonClient.onSuccess(redisson -> {
+      this.redisson = redisson;
+      bucket = redisson.getBucket("ball");
+      bucket.set(new JsonObject().put("message","empty"));
+
+      router.post("/api/pong").handler(context -> {
+        bucket.set(context.getBodyAsJson());
+        System.out.println("🤖 bucket updated");
+
+        context.response()
+          .putHeader("content-type", "application/json;charset=UTF-8")
+          .end(
+            new JsonObject().put("message", "👋 hey bucket updated 😃").toString()
+          );
+      });
+
+      router.get("/api/pong").handler(context -> {
+        context.response()
+          .putHeader("content-type", "application/json;charset=UTF-8")
+          .end(
+            bucket.get().encodePrettily()
+          );
+      });
+    });
+
+    getRedissonClient.onFailure(fail -> {
+      router.post("/api/pong").handler(context -> {
+        context.response()
+          .putHeader("content-type", "application/json;charset=UTF-8")
+          .end(
+            new JsonObject().put("message", fail.getMessage()).toString()
+          );
+      });
+
+      router.get("/api/pong").handler(context -> {
+        context.response()
+          .putHeader("content-type", "application/json;charset=UTF-8")
+          .end(
+            new JsonObject().put("message", fail.getMessage()).toString()
+          );
+      });
     });
 
     /* === Start the server === */
