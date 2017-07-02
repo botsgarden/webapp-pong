@@ -43,42 +43,58 @@ public class WebApp extends AbstractVerticle {
 
     // === Redisson Part === ... with vavr
 
-    Try<RBucket<JsonObject>> tryBucket = Try.of(() -> {
+    Try<RedissonClient> getRedissonClient = Try.of(() -> {
       Config config = new Config();
       config.useSingleServer().setAddress(
         Optional.ofNullable(System.getenv("REDIS_URL")).orElse("redis://127.0.0.1:6379")
       );
       redisson = Redisson.create(config);
-      RBucket<JsonObject> bucket = redisson.getBucket("ball");
-      return bucket;
     });
 
-    tryBucket.onSuccess(bucket -> {
+
+
+    getRedissonClient.onSuccess(redisson -> {
+      /* === Define routes and start the server === */
+      
+      // create a bucket if it does not exist
+      RBucket<JsonObject> bucket = redisson.getBucket("ball");
       this.bucket = bucket;
+
+      router.post("/api/pong").handler(context -> {
+        bucket.set(context.getBodyAsJson());
+        System.out.println("🤖 bucket updated");
+
+        context.response()
+          .putHeader("content-type", "application/json;charset=UTF-8")
+          .end(
+            new JsonObject().put("message", "👋 hey bucket updated 😃").toString()
+          );
+      });
+
+      router.get("/api/pong").handler(context -> {
+        context.response()
+          .putHeader("content-type", "application/json;charset=UTF-8")
+          .end(
+            bucket.get().encodePrettily()
+          );
+      });
+
+
     }).onFailure(err -> {
-      this.bucket.set(new JsonObject().put("errorMessage", err.getMessage()));
+
+      router.get("/api/pong").handler(context -> {
+        context.response()
+          .putHeader("content-type", "application/json;charset=UTF-8")
+          .end(
+            new JsonObject().put("errorMessage", err.getMessage()).encodePrettily()
+          );
+      });
     });
     
-    /* === Define routes and start the server === */
-    router.post("/api/pong").handler(context -> {
+    
 
-      bucket.set(context.getBodyAsJson());
-      System.out.println("🤖 bucket updated");
 
-      context.response()
-        .putHeader("content-type", "application/json;charset=UTF-8")
-        .end(
-          new JsonObject().put("message", "👋 hey bucket updated 😃").toString()
-        );
-    });
-
-    router.get("/api/pong").handler(context -> {
-      context.response()
-        .putHeader("content-type", "application/json;charset=UTF-8")
-        .end(
-          bucket.get().encodePrettily()
-        );
-    });
+    /* === Start the server === */
 
     // serve static assets, see /resources/webroot directory
     router.route("/*").handler(StaticHandler.create());
